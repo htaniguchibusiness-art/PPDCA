@@ -157,13 +157,30 @@ function bandLabel(score){
 
 // グループ配列を直接受け、対象のコメント欄キーを明示
 function coverageByCheck(all, checks, commentKey){
-  const textArr = all.map(l => (l.comments?.[commentKey] || ''));
-  const stats = checks.map(item=>{
+  // まずは保存された ⭕️/❌ を持っているログで計算
+  const withChecks = all.filter(l => l.checks && l.checks[commentKey]);
+
+  if (withChecks.length) {
+    const stats = checks.map(item=>{
+      const ok = withChecks.filter(l => l.checks[commentKey][item.id] === '⭕️').length;
+      const pct = Math.round(ok / withChecks.length * 100);
+      return {id:item.id, text:item.text, pct};
+    });
+    return stats.sort((a,b)=>a.pct-b.pct).slice(0,2);
+  }
+
+  // 互換: 古いログはコメントのキーワード検出で代替
+  const textArr = all
+    .map(l => (l.comments?.[commentKey] || ''))
+    .filter(s => s.trim().length > 0); // 空コメントは分母に含めない
+
+  const denom = textArr.length;
+  const fallbackStats = checks.map(item=>{
     const hit = textArr.filter(tx => item.kw.some(k=>tx.includes(k))).length;
-    const pct = textArr.length ? Math.round(hit / textArr.length * 100) : 0;
+    const pct = denom ? Math.round(hit / denom * 100) : 0;
     return {id:item.id, text:item.text, pct};
   });
-  return stats.sort((a,b)=>a.pct-b.pct).slice(0,2); // 出現率が低い2件
+  return fallbackStats.sort((a,b)=>a.pct-b.pct).slice(0,2);
 }
 
 // 踏み込んだコメント生成（KWは表示しない／％のみ）
@@ -194,8 +211,9 @@ function buildComments(all, cAvg, rate, cnt){
 
   // テキスト分析：各フェーズの「出現率の低い観点」提示（KWは非表示）
   const lowConn = coverageByCheck(all, CHECKS.conn, 'conn');
-  const lowProp = coverageByCheck(all, CHECKS.prop, 'prop');
-  const lowClose = coverageByCheck(all, CHECKS.close, 'close');
+　const lowProp = coverageByCheck(all, CHECKS.prop, 'prop');
+　const lowClose = coverageByCheck(all, CHECKS.close, 'close');
+
 
   if(lowConn.length){
     const tips = lowConn.map(s=>`・${s.text}（${s.pct}%）`).join('<br>');
@@ -282,11 +300,24 @@ function populateDateSelectors() {
 
 saveBtn.onclick=()=>{
   if(!f_date.value){alert("日付を入力してください"); return;}
+
+  // 最新の自動判定を反映（入力直後でも取りこぼさない）
+  autoJudge(f_conn.value,CHECKS.conn,'conn');
+  autoJudge(f_prop.value,CHECKS.prop,'prop');
+  autoJudge(f_close.value,CHECKS.close,'close');
+
+  // ⭕️/❌ のスナップショットを保存（後で正確に％計算するため）
+  const snap = {conn:{}, prop:{}, close:{}};
+  CHECKS.conn.forEach(i=> snap.conn[i.id]  = state.conn[i.id]  || '❌');
+  CHECKS.prop.forEach(i=> snap.prop[i.id]  = state.prop[i.id]  || '❌');
+  CHECKS.close.forEach(i=> snap.close[i.id] = state.close[i.id] || '❌');
+
   let scores={
     conn:calcScore('conn',CHECKS.conn).pct,
     prop:calcScore('prop',CHECKS.prop).pct,
     close:calcScore('close',CHECKS.close).pct
   };
+
   let entry={
     result:f_result.value,
     purpose:f_purpose.value,
@@ -295,8 +326,10 @@ saveBtn.onclick=()=>{
     age:f_age.value,
     gender:f_gender.value,
     comments:{conn:f_conn.value,prop:f_prop.value,close:f_close.value},
-    scores
+    scores,
+    checks: snap   // ← これを新規追加
   };
+
   if(!logs[f_date.value]) logs[f_date.value]=[];
   logs[f_date.value].push(entry);
   localStorage.setItem('pdca_logs',JSON.stringify(logs));
