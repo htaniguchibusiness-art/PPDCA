@@ -181,14 +181,14 @@ function buildComments(all, cAvg, rate, cnt){
 
   // ボトルネック検出
   const gap = (a,b)=>Math.abs(a-b);
-  if(cAvg.conn >= 70 && cAvg.prop < 60) comments.push('ボトルネック：ヒアリング→提案の橋渡しが弱い');
-  if(cAvg.prop >= 70 && cAvg.close < 60) comments.push('ボトルネック：提案→クロージングの終盤が弱い');
-  if(cAvg.conn < 60 && (cAvg.prop >= 70 || cAvg.close >= 70)) comments.push('序盤の深掘り不足が後半に影響');
+  if(cAvg.conn >= 70 && cAvg.prop < 60) comments.push('ボトルネック：ヒアリング→提案の連動性が低い');
+  if(cAvg.prop >= 70 && cAvg.close < 60) comments.push('ボトルネック：購入への誘導が自然につながっていない');
+  if(cAvg.conn < 60 && (cAvg.prop >= 70 || cAvg.close >= 70)) comments.push('最初の理解が不十分で、提案に深みが出にくい');
   if(gap(cAvg.conn, cAvg.prop) >= 15) comments.push('Build と Propose の差が大きい');
 
   // 成約率×Closeの整合
-  if(cAvg.close >= 75 && rate < 35) comments.push('Close高・成約低：流入質/在庫適合に課題');
-  else if(cAvg.close < 60 && rate >= 35) comments.push('成約良・Close低：終盤対応の再現性不足');
+  if(cAvg.close >= 75 && rate < 35) comments.push('Close高・成約低：お客様の希望と在庫ラインナップが噛み合っていない可能性');
+  else if(cAvg.close < 60 && rate >= 35) comments.push('成約良・Close低：クロージングが安定していない');
 
   // キーワード不足（テキスト分析）
   const lowConn = coverageByCheck(all, 'conn');
