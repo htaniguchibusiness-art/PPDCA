@@ -8,7 +8,7 @@
 body {font-family: system-ui, sans-serif; margin:0; background:#fff; color:#111;}
 header {padding:10px; border-bottom:1px solid #ddd; font-weight:bold;}
 main {display:grid; grid-template-columns:380px 1fr; gap:12px; padding:12px;}
- @media(max-width:980px){main{grid-template-columns:1fr;}}
+@media(max-width:980px){main{grid-template-columns:1fr;}}
 .panel{border:1px solid #ddd; border-radius:8px; padding:10px; background:#fff;}
 .panel h3{margin:0 0 8px; font-size:1rem;}
 textarea{width:100%; min-height:100px; margin-bottom:8px; padding:6px;}
@@ -23,26 +23,14 @@ button{padding:6px 10px; margin:4px 0; border-radius:6px; cursor:pointer;}
 .details{margin-top:4px; font-size:.85rem;}
 table{width:100%; border-collapse:collapse; margin-top:8px; font-size:.9rem;}
 th,td{border:1px solid #ddd; padding:6px;}
-.section-label { 
-  display: block; 
-  font-weight: bold; 
-  font-size: 1.1rem; 
-  margin-top: 16px;
-  margin-bottom: 4px;
-  padding-bottom: 6px;
-  border-bottom: 2px solid #eee;
+.section-label{
+  display:block; font-weight:bold; font-size:1.1rem;
+  margin-top:16px; margin-bottom:4px; padding-bottom:6px; border-bottom:2px solid #eee;
 }
-#log {
-  font-size: .9rem;  /* リストと同じ大きさに */
-}
-
-#log h4 {
-  font-size: .9rem;  /* 日付見出しも同じに揃える */
-}
-#analysis {
-  font-size: .9rem;  /* リスト・ログと同じ */
-  line-height: 1.4;
-}
+/* フォント統一 */
+#log { font-size:.9rem; }
+#log h4 { font-size:.9rem; }
+#analysis { font-size:.9rem; line-height:1.4; }
 </style>
 </head>
 <body>
@@ -158,9 +146,7 @@ const CHECKS={
   ]
 };
 
-// === コメント精度アップ用の補助関数 ===
-
-// スコア帯ごとの評価ラベルと短評
+/* ===== コメント精度アップ用の補助関数（重複なし） ===== */
 function bandLabel(score){
   if(score < 40) return {label:'かなり弱い', hint:'質問が足りず提案につながっていない'};
   if(score < 60) return {label:'弱め', hint:'対応にばらつきがあり安定していない'};
@@ -168,7 +154,6 @@ function bandLabel(score){
   return {label:'強み', hint:'安定していて説得力がある'};
 }
 
-// コメント文の中から不足している観点を検出
 function coverageByCheck(all, groupKey){
   const textArr = all.map(l => (l.comments?.[groupKey] || ''));
   const checks = CHECKS[groupKey];
@@ -177,15 +162,14 @@ function coverageByCheck(all, groupKey){
     const pct = textArr.length ? Math.round(hit / textArr.length * 100) : 0;
     return {id:item.id, text:item.text, pct, kw:item.kw};
   });
-  return stats.sort((a,b)=>a.pct-b.pct).slice(0,2); // 出現率の低い2件を返す
+  return stats.sort((a,b)=>a.pct-b.pct).slice(0,2);
 }
 
-// 踏み込んだコメント生成
 function buildComments(all, cAvg, rate, cnt){
   const comments = [];
   if(cnt < 8) comments.push(`※ サンプル少（${cnt}件）。傾向は暫定`);
 
-  // Build / Propose / Close それぞれの短評
+  // フェーズ短評
   ([
     ['Build（ヒアリング/関係構築）','conn'],
     ['Propose（提案）','prop'],
@@ -195,29 +179,18 @@ function buildComments(all, cAvg, rate, cnt){
     comments.push(`${label}：${cAvg[key]}% → ${band.label}（${band.hint}）`);
   });
 
-  // フェーズ間のボトルネック検出
+  // ボトルネック検出
   const gap = (a,b)=>Math.abs(a-b);
-  if(cAvg.conn >= 70 && cAvg.prop < 60){
-    comments.push('ボトルネック：ヒアリングから提案への橋渡しが弱い');
-  }
-  if(cAvg.prop >= 70 && cAvg.close < 60){
-    comments.push('ボトルネック：提案からクロージングへのつなぎが弱い');
-  }
-  if(cAvg.conn < 60 && (cAvg.prop >= 70 || cAvg.close >= 70)){
-    comments.push('序盤の深掘り不足が後半に影響している');
-  }
-  if(gap(cAvg.conn, cAvg.prop) >= 15){
-    comments.push('Build と Propose の差が大きい');
-  }
+  if(cAvg.conn >= 70 && cAvg.prop < 60) comments.push('ボトルネック：ヒアリング→提案の橋渡しが弱い');
+  if(cAvg.prop >= 70 && cAvg.close < 60) comments.push('ボトルネック：提案→クロージングの終盤が弱い');
+  if(cAvg.conn < 60 && (cAvg.prop >= 70 || cAvg.close >= 70)) comments.push('序盤の深掘り不足が後半に影響');
+  if(gap(cAvg.conn, cAvg.prop) >= 15) comments.push('Build と Propose の差が大きい');
 
-  // 成約率と Close の整合チェック
-  if(cAvg.close >= 75 && rate < 35){
-    comments.push('Close は高いのに成約率が低い → 流入質や在庫の適合に課題');
-  } else if(cAvg.close < 60 && rate >= 35){
-    comments.push('成約率は良いが Close が低い → 終盤対応の再現性が不足');
-  }
+  // 成約率×Closeの整合
+  if(cAvg.close >= 75 && rate < 35) comments.push('Close高・成約低：流入質/在庫適合に課題');
+  else if(cAvg.close < 60 && rate >= 35) comments.push('成約良・Close低：終盤対応の再現性不足');
 
-  // コメント内のキーワード不足を検出
+  // キーワード不足（テキスト分析）
   const lowConn = coverageByCheck(all, 'conn');
   const lowProp = coverageByCheck(all, 'prop');
   const lowClose = coverageByCheck(all, 'close');
@@ -235,48 +208,13 @@ function buildComments(all, cAvg, rate, cnt){
     comments.push(`【Closeの弱点】<br>${tips}`);
   }
 
+  if(comments.length === 0) comments.push('今月の傾向：特筆すべき偏りなし');
   return comments;
 }
-
-// === コメント精度アップ用の補助関数 ===
-function bandLabel(score){
-  if(score < 40) return {label:'要改善（深刻）', hint:'質問が足りず提案につながっていない'};
-  if(score < 60) return {label:'弱め', hint:'対応にばらつきがあり安定していない'};
-  if(score < 80) return {label:'標準', hint:'基本はできているが深みに欠ける'};
-  return {label:'強み', hint:'安定していて説得力がある'};
-}
-
-function coverageByCheck(all, groupKey){
-  const textArr = all.map(l => (l.comments?.[groupKey] || ''));
-  const checks = CHECKS[groupKey];
-  const stats = checks.map(item=>{
-    const hit = textArr.filter(tx => item.kw.some(k=>tx.includes(k))).length;
-    const pct = textArr.length ? Math.round(hit / textArr.length * 100) : 0;
-    return {id:item.id, text:item.text, pct, kw:item.kw};
-  });
-  return stats.sort((a,b)=>a.pct-b.pct).slice(0,2);
-}
-
-function buildComments(all, cAvg, rate, cnt){
-  const comments = [];
-  if(cnt < 8){
-    comments.push(`※ 今月のサンプル数が少ないため暫定です（${cnt}件）。`);
-  }
-  ([
-    ['Build（ヒアリング/関係構築）','conn'],
-    ['Propose（提案）','prop'],
-    ['Close（クロージング）','close'],
-  ]).forEach(([label,key])=>{
-    const band = bandLabel(cAvg[key]);
-    comments.push(`${label}：${cAvg[key]}% → ${band.label}。${band.hint}`);
-  });
-  // 以降、ボトルネック検出やキーワード不足の指摘…（前の回答のコードそのまま）
-  return comments;
-}
-
+/* ===== 補助関数ここまで ===== */
 
 let state={conn:{},prop:{},close:{}};
-let logs=JSON.parse(localStorage.getItem('pdca_logs')||'{}'); // 日付ごと
+let logs=JSON.parse(localStorage.getItem('pdca_logs')||'{}');
 
 function toggleState(group,id){
   let cur=state[group][id]||'❌';
@@ -336,9 +274,7 @@ function populateDateSelectors() {
   q_year.innerHTML = '<option value="">年を選択</option>' + years.map(y => `<option value="${y}">${y}年</option>`).join('');
 
   let monthHtml = '<option value="">月を選択</option>';
-  for (let i = 1; i <= 12; i++) {
-    monthHtml += `<option value="${i}">${i}月</option>`;
-  }
+  for (let i = 1; i <= 12; i++) monthHtml += `<option value="${i}">${i}月</option>`;
   q_month_select.innerHTML = monthHtml;
 }
 
@@ -370,80 +306,56 @@ saveBtn.onclick=()=>{
 
 function showComments(date, index) {
   const entry = logs[date] && logs[date][index];
-  if (!entry) {
-    alert('コメントが見つかりません。');
-    return;
-  }
+  if (!entry) { alert('コメントが見つかりません。'); return; }
   const c = entry.comments;
   const text = `【関係構築】\n${c.conn}\n\n【提案】\n${c.prop}\n\n【クロージング】\n${c.close}`;
   alert(text);
 }
 
 function deleteLog(date, index, event) {
-  event.stopPropagation(); // Prevent the comment popup from opening
+  event.stopPropagation();
   if (confirm('このログを本当に削除しますか？')) {
-    // Remove the specific entry
     logs[date].splice(index, 1);
-
-    // If the date has no more entries, remove the date itself
-    if (logs[date].length === 0) {
-      delete logs[date];
-    }
-
-    // Save the updated logs
+    if (logs[date].length === 0) delete logs[date];
     localStorage.setItem('pdca_logs', JSON.stringify(logs));
-
-    // Re-render the UI
     renderLogs();
-    populateDateSelectors(); // Update year/month dropdowns in case a year was removed
+    populateDateSelectors();
   }
 }
 
 function updateProspect(date, index, event) {
   event.stopPropagation();
   const entry = logs[date][index];
-  
   if (confirm(`このプロスペクトを「購入」に変更しますか？`)) {
     entry.result = '購入';
   } else if (confirm(`「購入なし」に変更しますか？`)) {
     entry.result = '購入なし';
   } else {
-    return; // User cancelled both, do nothing
+    return;
   }
-  
   localStorage.setItem('pdca_logs', JSON.stringify(logs));
   renderLogs();
 }
 
 function renderLogs(){
-  // 1. Group logs by month
   const logsByMonth = {};
-  const sortedDates = Object.keys(logs).sort().reverse(); // Newest dates first
+  const sortedDates = Object.keys(logs).sort().reverse();
 
   for (const date of sortedDates) {
-    const month = date.substring(0, 7); // "YYYY-MM"
-    if (!logsByMonth[month]) {
-      logsByMonth[month] = {};
-    }
+    const month = date.substring(0, 7);
+    if (!logsByMonth[month]) logsByMonth[month] = {};
     logsByMonth[month][date] = logs[date];
   }
 
-  // 2. Render the HTML
-  const sortedMonths = Object.keys(logsByMonth).sort().reverse(); // Newest months first
+  const sortedMonths = Object.keys(logsByMonth).sort().reverse();
 
   log.innerHTML = sortedMonths.map(month => {
     const monthDates = Object.keys(logsByMonth[month]);
-    
-    // Create the content for inside the collapsible section
     const monthContent = monthDates.map(date => {
       const items = logsByMonth[month][date].map((l, i) => {
-        let resultHtml;
-        if (l.result === 'プロスペクト') {
-          resultHtml = `<b style="cursor:pointer; color:#c69500; text-decoration:underline;" onclick="updateProspect('${date}', ${i}, event)">${l.result}</b>`;
-        } else {
-          resultHtml = `<b>${l.result}</b>`;
-        }
-
+        const resultHtml = (l.result === 'プロスペクト')
+          ? `<b style="cursor:pointer; color:#c69500; text-decoration:underline;" onclick="updateProspect('${date}', ${i}, event)">${l.result}</b>`
+          : `<b>${l.result}</b>`;
         return `<div style="display:flex; align-items:center; border:1px solid #ddd;margin:4px;padding:4px;">
                   <div style="flex-grow:1; cursor:pointer;" onclick="showComments('${date}', ${i})">
                     <div>${resultHtml} (${l.purpose}/${l.category}/${l.price}/${l.age}/${l.gender})</div>
@@ -455,11 +367,9 @@ function renderLogs(){
       return `<h4>${date}</h4>${items}`;
     }).join('');
 
-    // Format month string for display, e.g., "2023-09" -> "2023年9月"
     const [year, monthNum] = month.split('-');
     const displayMonth = `${year}年${parseInt(monthNum, 10)}月`;
 
-    // Use <details> and <summary> for the collapsible section
     return `<details>
               <summary style="cursor:pointer; font-size:1.1rem; font-weight:bold; margin: 8px 0;">${displayMonth}</summary>
               ${monthContent}
@@ -477,14 +387,14 @@ analyzeBtn.onclick=()=>{
   Object.keys(logs).forEach(d=>{
     if(d.startsWith(month)) all.push(...logs[d]);
   });
-  let cnt=all.length;
-  let buy=all.filter(l=>l.result==="購入").length;
-  let rate=cnt>0?Math.round(buy/cnt*100):0;
 
-  let avg=(key)=>cnt?Math.round(all.map(l=>l.scores[key]||0).reduce((a,b)=>a+b,0)/cnt):0;
-  let cAvg={conn:avg('conn'),prop:avg('prop'),close:avg('close')};
+  const cnt=all.length;
+  const buy=all.filter(l=>l.result==="購入").length;
+  const rate=cnt?Math.round(buy/cnt*100):0;
 
-  // ← ここが新ポイント
+  const avg=(key)=>cnt?Math.round(all.map(l=>l.scores?.[key]||0).reduce((a,b)=>a+b,0)/cnt):0;
+  const cAvg={conn:avg('conn'),prop:avg('prop'),close:avg('close')};
+
   const comments = buildComments(all, cAvg, rate, cnt);
 
   analysis.innerHTML = `
