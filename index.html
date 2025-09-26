@@ -156,34 +156,43 @@ function bandLabel(score){
 }
 
 // グループ配列を直接受け、対象のコメント欄キーを明示
+// 弱点抽出：できてない率（failRate）が高い順に2件、100%できてる項目は除外
+// checks: CHECKS.conn / CHECKS.prop / CHECKS.close の配列
+// commentKey: 'conn' | 'prop' | 'close'
 function coverageByCheck(all, checks, commentKey){
-  // まずは保存された ⭕️/❌ を持っているログで計算
   const withChecks = all.filter(l => l.checks && l.checks[commentKey]);
 
   if (withChecks.length) {
+    // ⭕️=できた / ❌=できてない
     const stats = checks.map(item=>{
       const ok = withChecks.filter(l => l.checks[commentKey][item.id] === '⭕️').length;
-      const pct = Math.round(ok / withChecks.length * 100);
-      return {id:item.id, text:item.text, pct};
+      const total = withChecks.length;
+      const okPct = Math.round(ok / total * 100);
+      const failRate = 100 - okPct;          // できてない率
+      return {id:item.id, text:item.text, failRate};
     });
-    return stats.sort((a,b)=>a.pct-b.pct).slice(0,2);
+
+    // 100%できてる（failRate=0）は除外して、できてない率が高い順に2件
+    return stats.filter(s=>s.failRate > 0).sort((a,b)=>b.failRate - a.failRate).slice(0,2);
   }
 
-  // 互換: 古いログはコメントのキーワード検出で代替
-  const textArr = all
-    .map(l => (l.comments?.[commentKey] || ''))
-    .filter(s => s.trim().length > 0); // 空コメントは分母に含めない
-
+  // 互換：古いログはコメント本文のキーワード出現で近似（出現=できたとみなす）
+  const textArr = all.map(l => (l.comments?.[commentKey] || '')).filter(s=>s.trim().length>0);
   const denom = textArr.length;
-  const fallbackStats = checks.map(item=>{
+
+  const fbStats = checks.map(item=>{
     const hit = textArr.filter(tx => item.kw.some(k=>tx.includes(k))).length;
-    const pct = denom ? Math.round(hit / denom * 100) : 0;
-    return {id:item.id, text:item.text, pct};
+    const okPct = denom ? Math.round(hit / denom * 100) : 0;
+    const failRate = 100 - okPct;
+    return {id:item.id, text:item.text, failRate};
   });
-  return fallbackStats.sort((a,b)=>a.pct-b.pct).slice(0,2);
+
+  return fbStats.filter(s=>s.failRate > 0).sort((a,b)=>b.failRate - a.failRate).slice(0,2);
 }
 
+
 // 踏み込んだコメント生成（KWは表示しない／％のみ）
+// 踏み込んだコメント生成（弱点は％を出さず、できてない率の高い2項目のみ表示）
 function buildComments(all, cAvg, rate, cnt){
   const comments = [];
   if(cnt < 8) comments.push(`※ サンプル少（${cnt}件）。傾向は暫定`);
@@ -195,42 +204,44 @@ function buildComments(all, cAvg, rate, cnt){
     ['Close（クロージング）','close'],
   ]).forEach(([label,key])=>{
     const band = bandLabel(cAvg[key]);
-    comments.push(`${label}：${cAvg[key]}% → ${band.label}（${band.hint}）`);
+    comments.push(`<b>${label}</b>：${cAvg[key]}% → ${band.label}（${band.hint}）`);
   });
 
   // ボトルネック検出（表現は読みやすく）
   const gap = (a,b)=>Math.abs(a-b);
-  if(cAvg.conn >= 70 && cAvg.prop < 60) comments.push('ボトルネック：聞けた情報が提案に活かし切れていない');
-  if(cAvg.prop >= 70 && cAvg.close < 60) comments.push('ボトルネック：提案から購入確認へのつなぎが弱い');
-  if(cAvg.conn < 60 && (cAvg.prop >= 70 || cAvg.close >= 70)) comments.push('ボトルネック：ヒアリング不足で提案・クロージングが弱まっている');
+  if(cAvg.conn >= 70 && cAvg.prop < 60) comments.push('<b>ボトルネック</b>：聞けた情報が提案に活かし切れていない');
+  if(cAvg.prop >= 70 && cAvg.close < 60) comments.push('<b>ボトルネック</b>：提案から購入確認へのつなぎが弱い');
+  if(cAvg.conn < 60 && (cAvg.prop >= 70 || cAvg.close >= 70)) comments.push('<b>ボトルネック</b>：ヒアリング不足で提案・クロージングが弱まっている');
   if(gap(cAvg.conn, cAvg.prop) >= 15) comments.push('Build と Propose の差が大きい');
+
+  // 弱点抽出（できていない率が高い2項目、100%は除外：coverageByCheck側で処理）
+  const lowConn = coverageByCheck(all, CHECKS.conn, 'conn');
+  const lowProp = coverageByCheck(all, CHECKS.prop, 'prop');
+  const lowClose = coverageByCheck(all, CHECKS.close, 'close');
+
+  if(lowConn.length){
+    const tips = lowConn.map(s=>`・${s.text}`).join('<br>');
+    comments.push(`<b>【Buildの弱点】</b><br>${tips}`);
+  }
+  if(lowProp.length){
+    const tips = lowProp.map(s=>`・${s.text}`).join('<br>');
+    comments.push(`<b>【Proposeの弱点】</b><br>${tips}`);
+  }
+  if(lowClose.length){
+    const tips = lowClose.map(s=>`・${s.text}`).join('<br>');
+    comments.push(`<b>【Closeの弱点】</b><br>${tips}`);
+  }
+  if(!lowConn.length && !lowProp.length && !lowClose.length){
+    comments.push('特に弱点なし');
+  }
 
   // 成約率×Closeの整合
   if(cAvg.close >= 75 && rate < 35) comments.push('接客力は高いが、来店客層や在庫が噛み合っていない可能性');
-  else if(cAvg.close < 60 && rate >= 35) comments.push('成約は出ているが、クロージングが安定していない');
+  else if(cAvg.close < 60 && rate >= 35) comments.push('売上には繋がっているが、クロージングが安定性に課題あり');
 
-  // テキスト分析：各フェーズの「出現率の低い観点」提示（KWは非表示）
-  const lowConn = coverageByCheck(all, CHECKS.conn, 'conn');
-　const lowProp = coverageByCheck(all, CHECKS.prop, 'prop');
-　const lowClose = coverageByCheck(all, CHECKS.close, 'close');
-
-
-  if(lowConn.length){
-    const tips = lowConn.map(s=>`・${s.text}（${s.pct}%）`).join('<br>');
-    comments.push(`【Buildの弱点】<br>${tips}`);
-  }
-  if(lowProp.length){
-    const tips = lowProp.map(s=>`・${s.text}（${s.pct}%）`).join('<br>');
-    comments.push(`【Proposeの弱点】<br>${tips}`);
-  }
-  if(lowClose.length){
-    const tips = lowClose.map(s=>`・${s.text}（${s.pct}%）`).join('<br>');
-    comments.push(`【Closeの弱点】<br>${tips}`);
-  }
-
-  if(comments.length === 0) comments.push('今月の傾向：特筆すべき偏りなし');
   return comments;
 }
+
 /* ===== 補助関数ここまで ===== */
 
 let state={conn:{},prop:{},close:{}};
