@@ -146,7 +146,8 @@ const CHECKS={
   ]
 };
 
-/* ===== コメント精度アップ用の補助関数（重複なし） ===== */
+/* ===== コメント精度アップ用の補助関数（安定版） ===== */
+// スコア帯ごとの評価ラベルと短評（簡潔＋具体）
 function bandLabel(score){
   if(score < 40) return {label:'かなり弱い', hint:'質問が足りず提案につながっていない'};
   if(score < 60) return {label:'弱め', hint:'対応にばらつきがあり安定していない'};
@@ -154,17 +155,18 @@ function bandLabel(score){
   return {label:'強み', hint:'安定していて説得力がある'};
 }
 
-function coverageByCheck(all, groupKey){
-  const textArr = all.map(l => (l.comments?.[groupKey] || ''));
-  const checks = CHECKS[groupKey];
+// グループ配列を直接受け、対象のコメント欄キーを明示
+function coverageByCheck(all, checks, commentKey){
+  const textArr = all.map(l => (l.comments?.[commentKey] || ''));
   const stats = checks.map(item=>{
     const hit = textArr.filter(tx => item.kw.some(k=>tx.includes(k))).length;
     const pct = textArr.length ? Math.round(hit / textArr.length * 100) : 0;
-    return {id:item.id, text:item.text, pct, kw:item.kw};
+    return {id:item.id, text:item.text, pct};
   });
-  return stats.sort((a,b)=>a.pct-b.pct).slice(0,2);
+  return stats.sort((a,b)=>a.pct-b.pct).slice(0,2); // 出現率が低い2件
 }
 
+// 踏み込んだコメント生成（KWは表示しない／％のみ）
 function buildComments(all, cAvg, rate, cnt){
   const comments = [];
   if(cnt < 8) comments.push(`※ サンプル少（${cnt}件）。傾向は暫定`);
@@ -179,32 +181,32 @@ function buildComments(all, cAvg, rate, cnt){
     comments.push(`${label}：${cAvg[key]}% → ${band.label}（${band.hint}）`);
   });
 
-  // ボトルネック検出
+  // ボトルネック検出（表現は読みやすく）
   const gap = (a,b)=>Math.abs(a-b);
-  if(cAvg.conn >= 70 && cAvg.prop < 60) comments.push('ボトルネック：ヒアリング→提案の連動性が低い');
-  if(cAvg.prop >= 70 && cAvg.close < 60) comments.push('ボトルネック：購入への誘導が自然につながっていない');
-  if(cAvg.conn < 60 && (cAvg.prop >= 70 || cAvg.close >= 70)) comments.push('最初の理解が不十分で、提案に深みが出にくい');
+  if(cAvg.conn >= 70 && cAvg.prop < 60) comments.push('ボトルネック：聞けた情報が提案に活かし切れていない');
+  if(cAvg.prop >= 70 && cAvg.close < 60) comments.push('ボトルネック：提案から購入確認へのつなぎが弱い');
+  if(cAvg.conn < 60 && (cAvg.prop >= 70 || cAvg.close >= 70)) comments.push('ボトルネック：ヒアリング不足で提案・クロージングが弱まっている');
   if(gap(cAvg.conn, cAvg.prop) >= 15) comments.push('Build と Propose の差が大きい');
 
   // 成約率×Closeの整合
-  if(cAvg.close >= 75 && rate < 35) comments.push('Close高・成約低：お客様の希望と在庫ラインナップが噛み合っていない可能性');
-  else if(cAvg.close < 60 && rate >= 35) comments.push('成約良・Close低：クロージングが安定していない');
+  if(cAvg.close >= 75 && rate < 35) comments.push('接客力は高いが、来店客層や在庫が噛み合っていない可能性');
+  else if(cAvg.close < 60 && rate >= 35) comments.push('成約は出ているが、クロージングが安定していない');
 
-  // キーワード不足（テキスト分析）
-  const lowConn = coverageByCheck(all, 'conn');
-  const lowProp = coverageByCheck(all, 'prop');
-  const lowClose = coverageByCheck(all, 'close');
+  // テキスト分析：各フェーズの「出現率の低い観点」提示（KWは非表示）
+  const lowConn = coverageByCheck(all, CHECKS.conn, 'conn');
+  const lowProp = coverageByCheck(all, CHECKS.prop, 'prop');
+  const lowClose = coverageByCheck(all, CHECKS.close, 'close');
 
   if(lowConn.length){
     const tips = lowConn.map(s=>`・${s.text}（${s.pct}%）`).join('<br>');
-　　　comments.push(`【Buildの弱点】<br>${tips}`);
+    comments.push(`【Buildの弱点】<br>${tips}`);
   }
   if(lowProp.length){
-    const tips = lowConn.map(s=>`・${s.text}（${s.pct}%）`).join('<br>');
+    const tips = lowProp.map(s=>`・${s.text}（${s.pct}%）`).join('<br>');
     comments.push(`【Proposeの弱点】<br>${tips}`);
   }
   if(lowClose.length){
-    const tips = lowConn.map(s=>`・${s.text}（${s.pct}%）`).join('<br>');
+    const tips = lowClose.map(s=>`・${s.text}（${s.pct}%）`).join('<br>');
     comments.push(`【Closeの弱点】<br>${tips}`);
   }
 
@@ -385,7 +387,7 @@ analyzeBtn.onclick=()=>{
   const month = `${year}-${monthVal.padStart(2, '0')}`;
   let all=[];
   Object.keys(logs).forEach(d=>{
-    if(d.startsWith(month)) all.push(...logs[d]);
+    if(d.startsWith(month)) all.push(...logs[d]));
   });
 
   const cnt=all.length;
