@@ -193,54 +193,48 @@ function coverageByCheck(all, checks, commentKey){
 
 // 踏み込んだコメント生成（KWは表示しない／％のみ）
 // 踏み込んだコメント生成（弱点は％を出さず、できてない率の高い2項目のみ表示）
+// 短評は「数値＋ラベルのみ」。弱点は下部セクションに一覧表示（該当なしも明示）
 function buildComments(all, cAvg, rate, cnt){
   const comments = [];
   if(cnt < 8) comments.push(`※ サンプル少（${cnt}件）。傾向は暫定`);
 
-  // フェーズ短評
+  // 1) フェーズ短評（ヒントや弱点は付けない）
   ([
     ['Build（ヒアリング/関係構築）','conn'],
     ['Propose（提案）','prop'],
     ['Close（クロージング）','close'],
   ]).forEach(([label,key])=>{
     const band = bandLabel(cAvg[key]);
-    comments.push(`<b>${label}</b>：${cAvg[key]}% → ${band.label}（${band.hint}）`);
+    comments.push(`<b>${label}</b>：${cAvg[key]}% → ${band.label}`);
   });
 
-  // ボトルネック検出（表現は読みやすく）
+  // 2) ボトルネック（見出しを太字）
   const gap = (a,b)=>Math.abs(a-b);
   if(cAvg.conn >= 70 && cAvg.prop < 60) comments.push('<b>ボトルネック</b>：聞けた情報が提案に活かし切れていない');
   if(cAvg.prop >= 70 && cAvg.close < 60) comments.push('<b>ボトルネック</b>：提案から購入確認へのつなぎが弱い');
   if(cAvg.conn < 60 && (cAvg.prop >= 70 || cAvg.close >= 70)) comments.push('<b>ボトルネック</b>：ヒアリング不足で提案・クロージングが弱まっている');
-  if(gap(cAvg.conn, cAvg.prop) >= 15) comments.push('Build と Propose の差が大きい');
+  if(gap(cAvg.conn, cAvg.prop) >= 15) comments.push('<b>ボトルネック</b>：Build と Propose の差が大きい');
 
-  // 弱点抽出（できていない率が高い2項目、100%は除外：coverageByCheck側で処理）
-  const lowConn = coverageByCheck(all, CHECKS.conn, 'conn');
-  const lowProp = coverageByCheck(all, CHECKS.prop, 'prop');
+  // 3) 弱点セクション（各フェーズごとに最大2項目。なければ「該当なし」）
+  const lowConn  = coverageByCheck(all, CHECKS.conn,  'conn');   // ← 100%は関数側で除外
+  const lowProp  = coverageByCheck(all, CHECKS.prop,  'prop');
   const lowClose = coverageByCheck(all, CHECKS.close, 'close');
 
-  if(lowConn.length){
-    const tips = lowConn.map(s=>`・${s.text}`).join('<br>');
-    comments.push(`<b>【Buildの弱点】</b><br>${tips}`);
-  }
-  if(lowProp.length){
-    const tips = lowProp.map(s=>`・${s.text}`).join('<br>');
-    comments.push(`<b>【Proposeの弱点】</b><br>${tips}`);
-  }
-  if(lowClose.length){
-    const tips = lowClose.map(s=>`・${s.text}`).join('<br>');
-    comments.push(`<b>【Closeの弱点】</b><br>${tips}`);
-  }
-  if(!lowConn.length && !lowProp.length && !lowClose.length){
-    comments.push('特に弱点なし');
-  }
+  const tipsConn  = lowConn.map(s=>`・${s.text}`).join('<br>')  || '（該当なし）';
+  const tipsProp  = lowProp.map(s=>`・${s.text}`).join('<br>')  || '（該当なし）';
+  const tipsClose = lowClose.map(s=>`・${s.text}`).join('<br>') || '（該当なし）';
 
-  // 成約率×Closeの整合
+  comments.push(`<b>【Buildの弱点】</b><br>${tipsConn}`);
+  comments.push(`<b>【Proposeの弱点】</b><br>${tipsProp}`);
+  comments.push(`<b>【Closeの弱点】</b><br>${tipsClose}`);
+
+  // 4) 成約率×Closeの整合（文言そのまま／必要なら差し替え可）
   if(cAvg.close >= 75 && rate < 35) comments.push('接客力は高いが、来店客層や在庫が噛み合っていない可能性');
-  else if(cAvg.close < 60 && rate >= 35) comments.push('売上には繋がっているが、クロージングが安定性に課題あり');
+  else if(cAvg.close < 60 && rate >= 35) comments.push('売上には繋がっているが、クロージングに不安定さあり');
 
   return comments;
 }
+
 
 /* ===== 補助関数ここまで ===== */
 
