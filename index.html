@@ -387,7 +387,7 @@ analyzeBtn.onclick=()=>{
   const month = `${year}-${monthVal.padStart(2, '0')}`;
   let all=[];
   Object.keys(logs).forEach(d=>{
-    if(d.startsWith(month)) all.push(...logs[d]));
+    if(d.startsWith(month)) all.push(...logs[d]);
   });
 
   const cnt=all.length;
