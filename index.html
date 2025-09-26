@@ -196,15 +196,15 @@ function buildComments(all, cAvg, rate, cnt){
   const lowClose = coverageByCheck(all, 'close');
 
   if(lowConn.length){
-    const tips = lowConn.map(s=>`・${s.text}（言及率${s.pct}%｜KW:${s.kw.join('・')}）`).join('<br>');
-    comments.push(`【Buildの弱点】<br>${tips}`);
+    const tips = lowConn.map(s=>`・${s.text}（${s.pct}%）`).join('<br>');
+　　　comments.push(`【Buildの弱点】<br>${tips}`);
   }
   if(lowProp.length){
-    const tips = lowProp.map(s=>`・${s.text}（言及率${s.pct}%｜KW:${s.kw.join('・')}）`).join('<br>');
+    const tips = lowConn.map(s=>`・${s.text}（${s.pct}%）`).join('<br>');
     comments.push(`【Proposeの弱点】<br>${tips}`);
   }
   if(lowClose.length){
-    const tips = lowClose.map(s=>`・${s.text}（言及率${s.pct}%｜KW:${s.kw.join('・')}）`).join('<br>');
+    const tips = lowConn.map(s=>`・${s.text}（${s.pct}%）`).join('<br>');
     comments.push(`【Closeの弱点】<br>${tips}`);
   }
 
