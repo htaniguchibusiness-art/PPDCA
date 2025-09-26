@@ -159,11 +159,91 @@ const CHECKS={
 };
 
 // === コメント精度アップ用の補助関数 ===
+
+// スコア帯ごとの評価ラベルと短評
 function bandLabel(score){
-  if(score < 40) return {label:'要改善（深刻）', hint:'根本の型作りから見直しましょう。'};
-  if(score < 60) return {label:'弱め', hint:'基本動作の徹底で底上げを。'};
-  if(score < 80) return {label:'標準', hint:'安定。次は質の一段引き上げを。'};
-  return {label:'強み', hint:'強み。再現性を高めて他案件へ水平展開。'};
+  if(score < 40) return {label:'かなり弱い', hint:'質問が足りず提案につながっていない'};
+  if(score < 60) return {label:'弱め', hint:'対応にばらつきがあり安定していない'};
+  if(score < 80) return {label:'普通', hint:'基本はできているが深みに欠ける'};
+  return {label:'強み', hint:'安定していて説得力がある'};
+}
+
+// コメント文の中から不足している観点を検出
+function coverageByCheck(all, groupKey){
+  const textArr = all.map(l => (l.comments?.[groupKey] || ''));
+  const checks = CHECKS[groupKey];
+  const stats = checks.map(item=>{
+    const hit = textArr.filter(tx => item.kw.some(k=>tx.includes(k))).length;
+    const pct = textArr.length ? Math.round(hit / textArr.length * 100) : 0;
+    return {id:item.id, text:item.text, pct, kw:item.kw};
+  });
+  return stats.sort((a,b)=>a.pct-b.pct).slice(0,2); // 出現率の低い2件を返す
+}
+
+// 踏み込んだコメント生成
+function buildComments(all, cAvg, rate, cnt){
+  const comments = [];
+  if(cnt < 8) comments.push(`※ サンプル少（${cnt}件）。傾向は暫定`);
+
+  // Build / Propose / Close それぞれの短評
+  ([
+    ['Build（ヒアリング/関係構築）','conn'],
+    ['Propose（提案）','prop'],
+    ['Close（クロージング）','close'],
+  ]).forEach(([label,key])=>{
+    const band = bandLabel(cAvg[key]);
+    comments.push(`${label}：${cAvg[key]}% → ${band.label}（${band.hint}）`);
+  });
+
+  // フェーズ間のボトルネック検出
+  const gap = (a,b)=>Math.abs(a-b);
+  if(cAvg.conn >= 70 && cAvg.prop < 60){
+    comments.push('ボトルネック：ヒアリングから提案への橋渡しが弱い');
+  }
+  if(cAvg.prop >= 70 && cAvg.close < 60){
+    comments.push('ボトルネック：提案からクロージングへのつなぎが弱い');
+  }
+  if(cAvg.conn < 60 && (cAvg.prop >= 70 || cAvg.close >= 70)){
+    comments.push('序盤の深掘り不足が後半に影響している');
+  }
+  if(gap(cAvg.conn, cAvg.prop) >= 15){
+    comments.push('Build と Propose の差が大きい');
+  }
+
+  // 成約率と Close の整合チェック
+  if(cAvg.close >= 75 && rate < 35){
+    comments.push('Close は高いのに成約率が低い → 流入質や在庫の適合に課題');
+  } else if(cAvg.close < 60 && rate >= 35){
+    comments.push('成約率は良いが Close が低い → 終盤対応の再現性が不足');
+  }
+
+  // コメント内のキーワード不足を検出
+  const lowConn = coverageByCheck(all, 'conn');
+  const lowProp = coverageByCheck(all, 'prop');
+  const lowClose = coverageByCheck(all, 'close');
+
+  if(lowConn.length){
+    const tips = lowConn.map(s=>`・${s.text}（言及率${s.pct}%｜KW:${s.kw.join('・')}）`).join('<br>');
+    comments.push(`【Buildの弱点】<br>${tips}`);
+  }
+  if(lowProp.length){
+    const tips = lowProp.map(s=>`・${s.text}（言及率${s.pct}%｜KW:${s.kw.join('・')}）`).join('<br>');
+    comments.push(`【Proposeの弱点】<br>${tips}`);
+  }
+  if(lowClose.length){
+    const tips = lowClose.map(s=>`・${s.text}（言及率${s.pct}%｜KW:${s.kw.join('・')}）`).join('<br>');
+    comments.push(`【Closeの弱点】<br>${tips}`);
+  }
+
+  return comments;
+}
+
+// === コメント精度アップ用の補助関数 ===
+function bandLabel(score){
+  if(score < 40) return {label:'要改善（深刻）', hint:'質問が足りず提案につながっていない'};
+  if(score < 60) return {label:'弱め', hint:'対応にばらつきがあり安定していない'};
+  if(score < 80) return {label:'標準', hint:'基本はできているが深みに欠ける'};
+  return {label:'強み', hint:'安定していて説得力がある'};
 }
 
 function coverageByCheck(all, groupKey){
@@ -180,7 +260,7 @@ function coverageByCheck(all, groupKey){
 function buildComments(all, cAvg, rate, cnt){
   const comments = [];
   if(cnt < 8){
-    comments.push(`※ 今月のサンプル数が少ないため暫定です（${cnt}件）。来月も追跡を。`);
+    comments.push(`※ 今月のサンプル数が少ないため暫定です（${cnt}件）。`);
   }
   ([
     ['Build（ヒアリング/関係構築）','conn'],
