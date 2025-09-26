@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>接客PDCA</title>
+<style>
+body {font-family: system-ui, sans-serif; margin:0; background:#fff; color:#111;}
+header {padding:10px; border-bottom:1px solid #ddd; font-weight:bold;}
+main {display:grid; grid-template-columns:380px 1fr; gap:12px; padding:12px;}
+ @media(max-width:980px){main{grid-template-columns:1fr;}}
+.panel{border:1px solid #ddd; border-radius:8px; padding:10px; background:#fff;}
+.panel h3{margin:0 0 8px; font-size:1rem;}
+textarea{width:100%; min-height:100px; margin-bottom:8px; padding:6px;}
+select,input{width:100%; margin-bottom:6px; padding:6px;}
+button{padding:6px 10px; margin:4px 0; border-radius:6px; cursor:pointer;}
+.score{font-size:.9rem; margin:6px 0; padding:6px; border:1px solid #eee; border-radius:6px;}
+.ok{color:green; font-weight:bold;}
+.bad{color:#111;}
+.na{color:#666;}
+.item-row{display:flex; align-items:center; gap:6px; margin:2px 0;}
+.item-row span.state{cursor:pointer; font-weight:bold; width:2em; text-align:center;}
+.details{margin-top:4px; font-size:.85rem;}
+table{width:100%; border-collapse:collapse; margin-top:8px; font-size:.9rem;}
+th,td{border:1px solid #ddd; padding:6px;}
+.section-label { 
+  display: block; 
+  font-weight: bold; 
+  font-size: 1.1rem; 
+  margin-top: 16px;
+  margin-bottom: 4px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid #eee;
+}
+</style>
+</head>
+<body>
+<header>接客PDCA</header>
+<main>
+<section class="panel">
+  <h3>新規入力</h3>
+  <label>日付</label><input type="date" id="f_date">
+
+  <label>結果</label>
+  <select id="f_result">
+    <option value="">選択</option>
+    <option>購入</option>
+    <option>購入なし</option>
+    <option>プロスペクト</option>
+  </select>
+
+  <label>来店目的</label>
+  <select id="f_purpose">
+    <option value="">選択</option>
+    <option>ギフト</option>
+    <option>自分用</option>
+    <option>下見</option>
+  </select>
+
+  <label>カテゴリ</label>
+  <select id="f_category">
+    <option value="">選択</option>
+    <option>アクセサリー</option>
+    <option>SLG（小物）</option>
+    <option>バッグ</option>
+    <option>ベルト</option>
+    <option>シューズ</option>
+    <option>RTW</option>
+  </select>
+
+  <label>価格帯</label>
+  <select id="f_price">
+    <option value="">選択</option>
+    <option>〜10万円</option>
+    <option>10〜20万円</option>
+    <option>20〜30万円</option>
+    <option>30〜50万円</option>
+    <option>50万円〜</option>
+  </select>
+
+  <label>年代</label>
+  <select id="f_age">
+    <option value="">選択</option>
+    <option>10代</option><option>20代</option><option>30代</option>
+    <option>40代</option><option>50代</option><option>60代以上</option>
+  </select>
+
+  <label>性別</label>
+  <select id="f_gender">
+    <option value="">選択</option>
+    <option>男性</option><option>女性</option><option>不明</option>
+  </select>
+
+  <label class="section-label">Build a connection（関係構築）</label>
+  <textarea id="f_conn"></textarea>
+  <div id="score_conn" class="score"></div>
+
+  <label class="section-label">Curate & Propose（提案）</label>
+  <textarea id="f_prop"></textarea>
+  <div id="score_prop" class="score"></div>
+
+  <label class="section-label">Close the Sale（クロージング）</label>
+  <textarea id="f_close"></textarea>
+  <div id="score_close" class="score"></div>
+
+  <button id="saveBtn">保存</button>
+</section>
+
+<section class="panel">
+  <h3>分析（月ごと）</h3>
+  <div style="display: flex; gap: 8px; margin-bottom: 6px;">
+    <select id="q_year" style="width: auto; flex: 1;"><option value="">年を選択</option></select>
+    <select id="q_month_select" style="width: auto; flex: 1;"><option value="">月を選択</option></select>
+  </div>
+  <button id="analyzeBtn">分析する</button>
+  <div id="analysis"></div>
+
+  <h3>ログ（月ごと）</h3>
+  <div id="log"></div>
+</section>
+</main>
+
+<script>
+// ===== チェックリスト定義 =====
+const CHECKS={
+  conn:[
+    {id:1,text:'ギフトや用途など、お客様の目的を質問できたか',kw:['ギフト','用途','目的']},
+    {id:2,text:'ニーズを引き出すオープンクエスチョンを使えたか',kw:['オープン','質問','なぜ']},
+    {id:3,text:'パーソナル情報を会話や商品紹介に活かせたか',kw:['趣味','会話','雑談']},
+    {id:4,text:'関心や共感を示し、積極的に対応できたか',kw:['関心','共感','寄り添う','気持ち']},
+    {id:5,text:'ブランドの歴史やストーリーを共有できたか',kw:['ブランドストーリー','物語','伝統','歴史']}
+  ],
+  prop:[
+    {id:1,text:'代替案やスタイルの幅を提案できたか',kw:['代替','別案','スタイル']},
+    {id:2,text:'商品を整った状態で紹介できたか（バッグ・RTW・靴など）',kw:['整え','綺麗に','状態']},
+    {id:3,text:'価格以外の価値や理由を説明できたか',kw:['価値','理由','素材','機能']},
+    {id:4,text:'試着を促し、案内と意見確認ができたか',kw:['試着','履いて','着けて','試され']},
+    {id:5,text:'メンテナンス・保証・アフターサービスを共有できたか',kw:['メンテナンス','保証','修理','アフターサービス','お磨き']},
+    {id:6,text:'プロフェッショナルさを感じさせられたか',kw:['プロ','知識','丁寧']},
+    {id:7,text:'追加アイテムやサービスを提案できたか',kw:['追加','もう一点','サービス','他']}
+  ],
+  close:[
+    {id:1,text:'聞き出した情報を活かしてクロージングできたか',kw:['決める','おすすめ','本日','でしたら']},
+    {id:2,text:'競合や価格の懸念に対応できたか',kw:['競合','比較','他ブランド','価格','値段','予算']},
+    {id:3,text:'自信を持って購入を勧められたか',kw:['自信','ぜひ','間違いない','ぴったり']},
+    {id:4,text:'最後に見送りまで丁寧に対応できたか',kw:['見送り','出口','階段','最後まで']}
+  ]
+};
+
+let state={conn:{},prop:{},close:{}};
+let logs=JSON.parse(localStorage.getItem('pdca_logs')||'{}'); // 日付ごと
+
+function toggleState(group,id){
+  let cur=state[group][id]||'❌';
+  let next= cur==='❌' ? '⭕️' : (cur==='⭕️'?'－':'❌');
+  state[group][id]=next; updateScores();
+}
+function autoJudge(text,list,group){
+  list.forEach(item=>{
+    let hit=item.kw.some(k=>text.includes(k));
+    if(!state[group][item.id]) state[group][item.id]=hit?'⭕️':'❌';
+  });
+}
+function calcScore(group,list){
+  let res=list.map(item=>({t:item.text,s:state[group][item.id]||'❌'}));
+  let ok=res.filter(r=>r.s==='⭕️').length;
+  let bad=res.filter(r=>r.s==='❌').length;
+  let total=ok+bad;
+  let pct= total>0?Math.round(ok/total*100):0;
+  return {res,ok,total,pct};
+}
+function renderScore(group,list,containerId){
+  let {res,ok,total,pct}=calcScore(group,list);
+  let html=`<b>${ok} / ${total}（${pct}%）</b><div class="details">`;
+  res.forEach((r,i)=>{
+    let cls=r.s==='⭕️'?'ok':(r.s==='❌'?'bad':'na');
+    html+=`<div class="item-row"><span class="state ${cls}" onclick="toggleState('${group}',${i+1})">${r.s}</span> ${r.t}</div>`;
+  });
+  html+='</div>'; document.getElementById(containerId).innerHTML=html;
+}
+function updateScores(){
+  autoJudge(f_conn.value,CHECKS.conn,'conn');
+  autoJudge(f_prop.value,CHECKS.prop,'prop');
+  autoJudge(f_close.value,CHECKS.close,'close');
+  renderScore('conn',CHECKS.conn,'score_conn');
+  renderScore('prop',CHECKS.prop,'score_prop');
+  renderScore('close',CHECKS.close,'score_close');
+}
+['f_conn','f_prop','f_close'].forEach(id=>document.getElementById(id).addEventListener('input',updateScores));
+
+function resetForm(){
+  f_date.value='';
+  f_result.value='';
+  f_purpose.value='';
+  f_category.value='';
+  f_price.value='';
+  f_age.value='';
+  f_gender.value='';
+  f_conn.value='';
+  f_prop.value='';
+  f_close.value='';
+  state={conn:{},prop:{},close:{}};
+  updateScores();
+}
+
+function populateDateSelectors() {
+  const years = [...new Set(Object.keys(logs).map(d => d.substring(0, 4)))].sort().reverse();
+  q_year.innerHTML = '<option value="">年を選択</option>' + years.map(y => `<option value="${y}">${y}年</option>`).join('');
+
+  let monthHtml = '<option value="">月を選択</option>';
+  for (let i = 1; i <= 12; i++) {
+    monthHtml += `<option value="${i}">${i}月</option>`;
+  }
+  q_month_select.innerHTML = monthHtml;
+}
+
+saveBtn.onclick=()=>{
+  if(!f_date.value){alert("日付を入力してください"); return;}
+  let scores={
+    conn:calcScore('conn',CHECKS.conn).pct,
+    prop:calcScore('prop',CHECKS.prop).pct,
+    close:calcScore('close',CHECKS.close).pct
+  };
+  let entry={
+    result:f_result.value,
+    purpose:f_purpose.value,
+    category:f_category.value,
+    price:f_price.value,
+    age:f_age.value,
+    gender:f_gender.value,
+    comments:{conn:f_conn.value,prop:f_prop.value,close:f_close.value},
+    scores
+  };
+  if(!logs[f_date.value]) logs[f_date.value]=[];
+  logs[f_date.value].push(entry);
+  localStorage.setItem('pdca_logs',JSON.stringify(logs));
+  renderLogs();
+  populateDateSelectors();
+  alert('保存しました。');
+  resetForm();
+};
+
+function showComments(date, index) {
+  const entry = logs[date] && logs[date][index];
+  if (!entry) {
+    alert('コメントが見つかりません。');
+    return;
+  }
+  const c = entry.comments;
+  const text = `【関係構築】\n${c.conn}\n\n【提案】\n${c.prop}\n\n【クロージング】\n${c.close}`;
+  alert(text);
+}
+
+function deleteLog(date, index, event) {
+  event.stopPropagation(); // Prevent the comment popup from opening
+  if (confirm('このログを本当に削除しますか？')) {
+    // Remove the specific entry
+    logs[date].splice(index, 1);
+
+    // If the date has no more entries, remove the date itself
+    if (logs[date].length === 0) {
+      delete logs[date];
+    }
+
+    // Save the updated logs
+    localStorage.setItem('pdca_logs', JSON.stringify(logs));
+
+    // Re-render the UI
+    renderLogs();
+    populateDateSelectors(); // Update year/month dropdowns in case a year was removed
+  }
+}
+
+function updateProspect(date, index, event) {
+  event.stopPropagation();
+  const entry = logs[date][index];
+  
+  if (confirm(`このプロスペクトを「購入」に変更しますか？`)) {
+    entry.result = '購入';
+  } else if (confirm(`「購入なし」に変更しますか？`)) {
+    entry.result = '購入なし';
+  } else {
+    return; // User cancelled both, do nothing
+  }
+  
+  localStorage.setItem('pdca_logs', JSON.stringify(logs));
+  renderLogs();
+}
+
+function renderLogs(){
+  // 1. Group logs by month
+  const logsByMonth = {};
+  const sortedDates = Object.keys(logs).sort().reverse(); // Newest dates first
+
+  for (const date of sortedDates) {
+    const month = date.substring(0, 7); // "YYYY-MM"
+    if (!logsByMonth[month]) {
+      logsByMonth[month] = {};
+    }
+    logsByMonth[month][date] = logs[date];
+  }
+
+  // 2. Render the HTML
+  const sortedMonths = Object.keys(logsByMonth).sort().reverse(); // Newest months first
+
+  log.innerHTML = sortedMonths.map(month => {
+    const monthDates = Object.keys(logsByMonth[month]);
+    
+    // Create the content for inside the collapsible section
+    const monthContent = monthDates.map(date => {
+      const items = logsByMonth[month][date].map((l, i) => {
+        let resultHtml;
+        if (l.result === 'プロスペクト') {
+          resultHtml = `<b style="cursor:pointer; color:#c69500; text-decoration:underline;" onclick="updateProspect('${date}', ${i}, event)">${l.result}</b>`;
+        } else {
+          resultHtml = `<b>${l.result}</b>`;
+        }
+
+        return `<div style="display:flex; align-items:center; border:1px solid #ddd;margin:4px;padding:4px;">
+                  <div style="flex-grow:1; cursor:pointer;" onclick="showComments('${date}', ${i})">
+                    <div>${resultHtml} (${l.purpose}/${l.category}/${l.price}/${l.age}/${l.gender})</div>
+                    <div>Build:${l.scores.conn}% / Propose:${l.scores.prop}% / Close:${l.scores.close}%</div>
+                  </div>
+                  <span onclick="deleteLog('${date}', ${i}, event)" style="cursor:pointer; padding: 0 4px; font-size:0.7rem;">🗑️</span>
+                </div>`;
+      }).join('');
+      return `<h4>${date}</h4>${items}`;
+    }).join('');
+
+    // Format month string for display, e.g., "2023-09" -> "2023年9月"
+    const [year, monthNum] = month.split('-');
+    const displayMonth = `${year}年${parseInt(monthNum, 10)}月`;
+
+    // Use <details> and <summary> for the collapsible section
+    return `<details>
+              <summary style="cursor:pointer; font-size:1.1rem; font-weight:bold; margin: 8px 0;">${displayMonth}</summary>
+              ${monthContent}
+            </details>`;
+  }).join('');
+}
+
+analyzeBtn.onclick=()=>{
+  const year = q_year.value;
+  const monthVal = q_month_select.value;
+  if(!year || !monthVal){analysis.innerHTML="年と月を選択してください"; return;}
+  
+  const month = `${year}-${monthVal.padStart(2, '0')}`;
+
+  let all=[];
+  Object.keys(logs).forEach(d=>{
+    if(d.startsWith(month)) all.push(...logs[d]);
+  });
+  let cnt=all.length;
+  let buy=all.filter(l=>l.result==="購入").length;
+  let no=all.filter(l=>l.result==="購入なし").length;
+  let rate=cnt>0?Math.round(buy/cnt*100):0;
+  let avg=(key)=>cnt?Math.round(all.map(l=>l.scores[key]||0).reduce((a,b)=>a+b,0)/cnt):0;
+  let cAvg={conn:avg('conn'),prop:avg('prop'),close:avg('close')};
+  let comments=[];
+  if(cAvg.conn<60) comments.push("Build（ヒアリング/関係構築）が弱めです。質問やパーソナル情報の活用を強化しましょう。");
+  else if(cAvg.conn>=80) comments.push("Buildは安定して強みになっています。");
+  if(cAvg.prop<60) comments.push("Propose（提案）が弱めです。代替案や保証・サービス説明を意識しましょう。");
+  else if(cAvg.prop>=80) comments.push("Proposeは安定して強みです。");
+  if(cAvg.close<60) comments.push("Close（クロージング）が弱めです。成約につながる背中押しを意識しましょう。");
+  else if(cAvg.close>=80) comments.push("Closeは安定して強みです。");
+  analysis.innerHTML=`<table>\n    <tr><th>件数</th><th>購入</th><th>購入率</th></tr>\n    <tr><td>${cnt}</td><td>${buy}</td><td>${rate}%</td></tr>\n  </table>\n  <table>\n    <tr><th>Build 平均</th><th>Propose 平均</th><th>Close 平均</th></tr>\n    <tr><td>${cAvg.conn}%</td><td>${cAvg.prop}%</td><td>${cAvg.close}%</td></tr>\n  </table>\n  <p><b>改善コメント:</b><br>${comments.join("<br>")}</p>`;
+};
+
+renderLogs();
+updateScores();
+populateDateSelectors();
+</script>
+</body>
+</html>
