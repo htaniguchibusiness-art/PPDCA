@@ -209,11 +209,20 @@ function buildComments(all, cAvg, rate, cnt){
   });
 
   // 2) ボトルネック（見出しを太字）
-  const gap = (a,b)=>Math.abs(a-b);
-  if(cAvg.conn >= 70 && cAvg.prop < 60) comments.push('<b>ボトルネック</b>：聞けた情報が提案に活かし切れていない');
-  if(cAvg.prop >= 70 && cAvg.close < 60) comments.push('<b>ボトルネック</b>：提案から購入確認へのつなぎが弱い');
-  if(cAvg.conn < 60 && (cAvg.prop >= 70 || cAvg.close >= 70)) comments.push('<b>ボトルネック</b>：ヒアリング不足で提案・クロージングが弱まっている');
-  if(gap(cAvg.conn, cAvg.prop) >= 15) comments.push('<b>ボトルネック</b>：Build と Propose の差が大きい');
+  // ボトルネック検出（優先順位あり）
+// ボトルネック検出（優先順位あり、全体を赤字に）
+const gap = (a,b)=>Math.abs(a-b);
+if(cAvg.conn < 60 && (cAvg.prop >= 70 || cAvg.close >= 70)){
+  comments.push('<span style="color:red; font-weight:bold;">ボトルネック：ヒアリング不足で提案・クロージングが弱まっている</span>');
+} else if(cAvg.prop >= 70 && cAvg.close < 60){
+  comments.push('<span style="color:red; font-weight:bold;">ボトルネック：提案はできているが、最後の決め手に欠ける</span>');
+} else if(cAvg.conn >= 70 && cAvg.prop < 60){
+  comments.push('<span style="color:red; font-weight:bold;">ボトルネック：聞けた情報が提案に活かし切れていない</span>');
+} else if(gap(cAvg.conn, cAvg.prop) >= 15){
+  comments.push('<span style="color:red; font-weight:bold;">ボトルネック：Build と Propose の差が大きい</span>');
+}
+
+
 
   // 3) 弱点セクション（各フェーズごとに最大2項目。なければ「該当なし」）
   const lowConn  = coverageByCheck(all, CHECKS.conn,  'conn');   // ← 100%は関数側で除外
