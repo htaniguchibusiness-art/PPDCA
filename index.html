@@ -32,6 +32,17 @@ th,td{border:1px solid #ddd; padding:6px;}
   padding-bottom: 6px;
   border-bottom: 2px solid #eee;
 }
+#log {
+  font-size: .9rem;  /* リストと同じ大きさに */
+}
+
+#log h4 {
+  font-size: .9rem;  /* 日付見出しも同じに揃える */
+}
+#analysis {
+  font-size: .9rem;  /* リスト・ログと同じ */
+  line-height: 1.4;
+}
 </style>
 </head>
 <body>
@@ -146,6 +157,43 @@ const CHECKS={
     {id:4,text:'最後に見送りまで丁寧に対応できたか',kw:['見送り','出口','階段','最後まで']}
   ]
 };
+
+// === コメント精度アップ用の補助関数 ===
+function bandLabel(score){
+  if(score < 40) return {label:'要改善（深刻）', hint:'根本の型作りから見直しましょう。'};
+  if(score < 60) return {label:'弱め', hint:'基本動作の徹底で底上げを。'};
+  if(score < 80) return {label:'標準', hint:'安定。次は質の一段引き上げを。'};
+  return {label:'強み', hint:'強み。再現性を高めて他案件へ水平展開。'};
+}
+
+function coverageByCheck(all, groupKey){
+  const textArr = all.map(l => (l.comments?.[groupKey] || ''));
+  const checks = CHECKS[groupKey];
+  const stats = checks.map(item=>{
+    const hit = textArr.filter(tx => item.kw.some(k=>tx.includes(k))).length;
+    const pct = textArr.length ? Math.round(hit / textArr.length * 100) : 0;
+    return {id:item.id, text:item.text, pct, kw:item.kw};
+  });
+  return stats.sort((a,b)=>a.pct-b.pct).slice(0,2);
+}
+
+function buildComments(all, cAvg, rate, cnt){
+  const comments = [];
+  if(cnt < 8){
+    comments.push(`※ 今月のサンプル数が少ないため暫定です（${cnt}件）。来月も追跡を。`);
+  }
+  ([
+    ['Build（ヒアリング/関係構築）','conn'],
+    ['Propose（提案）','prop'],
+    ['Close（クロージング）','close'],
+  ]).forEach(([label,key])=>{
+    const band = bandLabel(cAvg[key]);
+    comments.push(`${label}：${cAvg[key]}% → ${band.label}。${band.hint}`);
+  });
+  // 以降、ボトルネック検出やキーワード不足の指摘…（前の回答のコードそのまま）
+  return comments;
+}
+
 
 let state={conn:{},prop:{},close:{}};
 let logs=JSON.parse(localStorage.getItem('pdca_logs')||'{}'); // 日付ごと
@@ -343,27 +391,33 @@ analyzeBtn.onclick=()=>{
   const year = q_year.value;
   const monthVal = q_month_select.value;
   if(!year || !monthVal){analysis.innerHTML="年と月を選択してください"; return;}
-  
-  const month = `${year}-${monthVal.padStart(2, '0')}`;
 
+  const month = `${year}-${monthVal.padStart(2, '0')}`;
   let all=[];
   Object.keys(logs).forEach(d=>{
     if(d.startsWith(month)) all.push(...logs[d]);
   });
   let cnt=all.length;
   let buy=all.filter(l=>l.result==="購入").length;
-  let no=all.filter(l=>l.result==="購入なし").length;
   let rate=cnt>0?Math.round(buy/cnt*100):0;
+
   let avg=(key)=>cnt?Math.round(all.map(l=>l.scores[key]||0).reduce((a,b)=>a+b,0)/cnt):0;
   let cAvg={conn:avg('conn'),prop:avg('prop'),close:avg('close')};
-  let comments=[];
-  if(cAvg.conn<60) comments.push("Build（ヒアリング/関係構築）が弱めです。質問やパーソナル情報の活用を強化しましょう。");
-  else if(cAvg.conn>=80) comments.push("Buildは安定して強みになっています。");
-  if(cAvg.prop<60) comments.push("Propose（提案）が弱めです。代替案や保証・サービス説明を意識しましょう。");
-  else if(cAvg.prop>=80) comments.push("Proposeは安定して強みです。");
-  if(cAvg.close<60) comments.push("Close（クロージング）が弱めです。成約につながる背中押しを意識しましょう。");
-  else if(cAvg.close>=80) comments.push("Closeは安定して強みです。");
-  analysis.innerHTML=`<table>\n    <tr><th>件数</th><th>購入</th><th>購入率</th></tr>\n    <tr><td>${cnt}</td><td>${buy}</td><td>${rate}%</td></tr>\n  </table>\n  <table>\n    <tr><th>Build 平均</th><th>Propose 平均</th><th>Close 平均</th></tr>\n    <tr><td>${cAvg.conn}%</td><td>${cAvg.prop}%</td><td>${cAvg.close}%</td></tr>\n  </table>\n  <p><b>改善コメント:</b><br>${comments.join("<br>")}</p>`;
+
+  // ← ここが新ポイント
+  const comments = buildComments(all, cAvg, rate, cnt);
+
+  analysis.innerHTML = `
+    <table>
+      <tr><th>件数</th><th>購入</th><th>購入率</th></tr>
+      <tr><td>${cnt}</td><td>${buy}</td><td>${rate}%</td></tr>
+    </table>
+    <table>
+      <tr><th>Build 平均</th><th>Propose 平均</th><th>Close 平均</th></tr>
+      <tr><td>${cAvg.conn}%</td><td>${cAvg.prop}%</td><td>${cAvg.close}%</td></tr>
+    </table>
+    <p><b>改善コメント:</b><br>${comments.join("<br>")}</p>
+  `;
 };
 
 renderLogs();
