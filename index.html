@@ -294,26 +294,24 @@ function calcScore(group,list){
   let pct= total>0?Math.round(ok/total*100):0;
   return {res,ok,total,pct};
 }
-function renderScore(group,list,containerId){
-  let {res,ok,total,pct}=calcScore(group,list);
-  let html=`<b>${ok} / ${total}（${pct}%）</b><div class="details">`;
+function renderScore(group, list, containerId){
+  const {res, ok, total, pct} = calcScore(group, list);
+  let html = `<b>${ok} / ${total}（${pct}%）</b><div class="details">`;
 
-  list.forEach((item,idx)=>{
-    const s = state[group][item.id] || '❌';
-    // 項目の色（red/green）
-    const colorClass = item.color === 'green' ? 'green' : 'red';
-    // 表示用クラス：該当なしは灰色、それ以外は項目色
-    const stateClass = (s === '－') ? 'na' : colorClass;
+  list.forEach(item => {
+    const s = state[group][item.id] || '❌';               
+    const baseColor = item.color === 'green' ? 'green' : 'red'; 
+    const stateClass = (s === '－') ? 'na' : baseColor;     
 
-    html+=`
+    html += `
       <div class="item-row">
         <span class="state ${stateClass}" onclick="toggleState('${group}',${item.id})">${s}</span>
         ${item.text}
       </div>`;
   });
 
-  html+='</div>';
-  document.getElementById(containerId).innerHTML=html;
+  html += '</div>';
+  document.getElementById(containerId).innerHTML = html;
 }
 
 function updateScores(){
