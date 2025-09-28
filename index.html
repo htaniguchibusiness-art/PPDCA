@@ -297,12 +297,25 @@ function calcScore(group,list){
 function renderScore(group,list,containerId){
   let {res,ok,total,pct}=calcScore(group,list);
   let html=`<b>${ok} / ${total}（${pct}%）</b><div class="details">`;
-  res.forEach((r,i)=>{
-    let cls=r.s==='⭕️'?'ok':(r.s==='❌'?'bad':'na');
-    html+=`<div class="item-row"><span class="state ${cls}" onclick="toggleState('${group}',${i+1})">${r.s}</span> ${r.t}</div>`;
+
+  list.forEach((item,idx)=>{
+    const s = state[group][item.id] || '❌';
+    // 項目の色（red/green）
+    const colorClass = item.color === 'green' ? 'green' : 'red';
+    // 表示用クラス：該当なしは灰色、それ以外は項目色
+    const stateClass = (s === '－') ? 'na' : colorClass;
+
+    html+=`
+      <div class="item-row">
+        <span class="state ${stateClass}" onclick="toggleState('${group}',${item.id})">${s}</span>
+        ${item.text}
+      </div>`;
   });
-  html+='</div>'; document.getElementById(containerId).innerHTML=html;
+
+  html+='</div>';
+  document.getElementById(containerId).innerHTML=html;
 }
+
 function updateScores(){
   autoJudge(f_conn.value,CHECKS.conn,'conn');
   autoJudge(f_prop.value,CHECKS.prop,'prop');
